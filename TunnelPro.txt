@@ -1,0 +1,366 @@
+	local targs = { ... }
+	if #targs < 3 then
+		-- Instructions
+		print( "<(1)> : Format is TunnelPro( width, height, length, (optional) currentx, currenty, currentz, dumpitems )" )
+		print( "Check out the README on GitHub for more info." )
+	end
+	 
+	-- Pull size of room from args
+	local width = tonumber( targs[1] )
+	if width < 1 then
+		print( "Tunnel width must be positive" )
+		return
+	end
+	local height = tonumber( targs[2] )
+	if height < 1 then
+		print( "Tunnel height must be positive" )
+		return
+	end
+	local length = tonumber( targs[3] )
+	if length < 1 then
+		print( "Tunnel length must be positive" )
+		return
+	end
+	 
+	-- set the current position relative to
+	-- the back left bottom corner of room
+	-- which is (1, 1, 1)
+	-- (based on user input)
+	local pos = vector.new( 1, 1, 1 )
+	if #targs > 5 then
+		pos.x = tonumber( targs[4] )
+		pos.y = tonumber( targs[5] )
+		pos.z = tonumber( targs[6] )
+	elseif #targs > 4 then
+		pos.x = tonumber( targs[4] )
+		pos.y = tonumber( targs[5] )
+	elseif #targs > 3 then
+		pos.x = tonumber( targs[4] )
+	end
+	 
+	-- save start pos so can return to dump items
+	-- and/or end program
+	local startpos = vector.new(pos.x, pos.y, pos.z)
+	 
+	local returningtostart
+	local invfull = false
+	 
+	--forward declaration of two functions needed
+	--in movement functions
+	local mustGetBack
+	local pitStop
+	local isInvFull
+	 
+	--basic move forward
+	local function tryMove()
+		while not turtle.forward() do
+			if turtle.getFuelLevel() == 0 then
+				mustGetBack()
+			end
+			turtle.attack()
+			if turtle.dig() then
+				if not returningtostart then
+					if isInvFull() then
+						invfull = true
+					end
+				end
+			end
+		end
+	end
+ 
+	--basic move up
+	local function tryMoveUp()
+		while not turtle.up() do
+			if turtle.getFuelLevel() == 0 then
+				mustGetBack()
+			end
+			turtle.attackUp()
+			if turtle.digUp() then
+				if not returningtostart then
+					if isInvFull() then
+						invfull = true
+					end
+				end
+			end
+		end
+	end
+	 
+	--basic move down
+	local function tryMoveDown()
+		while not turtle.down() do
+			if turtle.getFuelLevel() == 0 then
+				mustGetBack()
+			end
+			turtle.attackDown()
+			if turtle.digDown() then
+				if not returningtostart then
+					if isInvFull() then
+						invfull = true
+					end
+				end
+			end
+		end
+	end
+ 
+	--The specific destination movers
+	local function tryMoveZ( destz )
+		if destz == pos.z then
+			return
+		end
+		local increment
+		-- determine direction turtle needs to go
+		if destz < pos.z then
+			turtle.turnLeft()
+			turtle.turnLeft()
+			increment = -1
+		else
+			increment = 1
+		end
+		-- go that way to destination
+		while pos.z ~= destz do
+			tryMove()
+			pos.z = pos.z + increment
+			if mustGetBack() or invfull then
+				invfull = false
+				if increment == -1 then
+					turtle.turnRight()
+					turtle.turnRight()
+				end
+				pitStop()
+				if increment == -1 then
+					turtle.turnLeft()
+					turtle.turnLeft()
+				end
+			end
+		end
+		-- turn to face forward again if necessary
+		if increment == -1 then
+			turtle.turnRight()
+			turtle.turnRight()
+		end
+	end
+	 
+	local function tryMoveY( desty )
+		if desty == pos.y then
+			return
+		end
+		-- Determines direction turtle needs to go
+		if pos.y < desty then
+			-- up
+			while pos.y ~= desty do
+				tryMoveUp()
+				pos.y = pos.y + 1
+				if mustGetBack() or invfull then
+					invfull = false
+					pitStop()
+				end
+			end
+		else
+			-- down
+			while pos.y ~= desty do
+				tryMoveDown()
+				pos.y = pos.y - 1
+				if mustGetBack() or invfull then
+					invfull = false
+					pitStop()
+				end
+			end
+		end
+	end
+	local function tryMoveX( destx )
+		if destx == pos.x then
+			return
+		end
+		local increment
+		-- determine direction turtle needs to go
+		if destx < pos.x then
+			turtle.turnLeft()
+			increment = -1
+		else
+			turtle.turnRight()
+			increment = 1
+		end
+		-- go
+		while pos.x ~= destx do
+			tryMove()
+			pos.x = pos.x + increment
+			if mustGetBack() or invfull then
+				invfull = false
+				if increment == 1 then
+					turtle.turnLeft()
+				else
+					turtle.turnRight()
+				end
+				pitStop()
+				if increment == 1 then
+					turtle.turnRight()
+				else
+					turtle.turnLeft()
+				end
+			end
+		end
+		-- face forward again
+		if increment == 1 then
+			turtle.turnLeft()
+		else
+			turtle.turnRight()
+		end
+	end
+	 
+	--Takes turtle to the nearest block that is inside
+	--room
+	--avoids breaking inventories placed behind turtle
+	--startpoint
+	local function enterRoom()
+		if pos.z < 1 then
+			tryMoveZ( 1 )
+		end
+		if pos.x < 1 then
+			tryMoveX( 1 )
+		end
+		if pos.x > width then
+			tryMoveX( width )
+		end
+		if pos.y < 1 then
+			tryMoveY( 1 )
+		end
+		if pos.y > height then
+			tryMoveY( height )
+		end
+		if pos.z > length then
+			tryMoveZ( length )
+		end
+	end
+	 
+	--Go to any location using bottom left back as
+	--(1, 1, 1)
+	local function goto( vecdest )
+		enterRoom()
+		if pos.x ~= vecdest.x then
+			tryMoveX( vecdest.x )
+		end
+		if pos.y ~= vecdest.y then
+			tryMoveY( vecdest.y )
+		end
+		if pos.z ~= vecdest.z then
+			tryMoveZ( vecdest.z )
+		end
+	end
+	 
+	--determines moves to get back to start point
+	local function distToStart()
+		local total = math.abs(pos.x - startpos.x)
+		total = total + math.abs(pos.y - startpos.y)
+		return total + math.abs(pos.z - startpos.z)
+	end
+	 
+	--Eats any and all fuel in inventory
+	--except 1 item in slot 1 which is main fuel
+	--returns false if there was no fuel
+	local function tRefuel()
+		local wastherefuel = false
+		turtle.select(1)
+		if turtle.getItemCount(1) > 2 then
+			turtle.refuel(2)
+			wastherefuel = true
+		end
+		if turtle.getItemCount(1) == 2 then
+			turtle.refuel(1)
+			wastherefuel = true
+		end
+		return wastherefuel
+	end
+	 
+	isInvFull = function()
+		if returningtostart then
+			return false
+		end
+		for i = 2, 16 do
+			if turtle.getItemCount(i) == 0 then
+				return false
+			end
+		end
+		return true
+	end
+	 
+	-- returns weather the turtle must return or risk
+	-- running out of fuel before it gets back.
+	-- Or if inventory is full
+	mustGetBack = function()
+		if retuningtostart then
+			return false
+		end
+		if turtle.getFuelLevel() - distToStart() < 5 then
+			tRefuel()
+		end
+		if turtle.getFuelLevel() - distToStart() < 5 then
+			return true
+		end
+		return false
+	end
+	 
+	 
+	 
+	local function emptyInv()
+		turtle.turnRight()
+		turtle.turnRight()
+		for i = 2, 16 do
+			turtle.select(i)
+			turtle.drop()
+		end
+		turtle.turnRight()
+		turtle.turnRight()
+	end
+	 
+	local function grabFuel()
+		turtle.select(1)
+		local i = 1
+		while turtle.getItemSpace(1) > 0 and i < 27 do
+			turtle.suckUp(turtle.getItemSpace(1))
+			i = i + 1
+		end
+	end
+	 
+	pitStop = function()
+		returningtostart = true
+		local returnpos = vector.new(pos.x, pos.y, pos.z)
+		goto( startpos )
+		emptyInv()
+		grabFuel()
+		while not tRefuel() and turtle.getFuelLevel() < 80 do
+			print( "Not enough fuel. Please put some in slot 1." )
+			sleep(5)
+		end
+		goto( returnpos )
+		returningtostart = false
+	end
+	 
+	local function mineSlice()
+		local flipflop = true
+		for i = 1, height do
+			if flipflop then
+				tryMoveX( width )
+				flipflop = false
+			else
+				tryMoveX( 1 )
+				flipflop = true
+			end
+			if pos.y ~= 1 then
+				tryMoveY( pos.y - 1 )
+			end
+		end
+	end
+	 
+	local function main()
+		if mustGetBack() then
+			pitStop()
+		end
+		for i = 1, length do
+			goto( vector.new( 1, height, i ) )
+			mineSlice()
+		end
+		goto( startpos )
+		emptyInv()
+	end
+	 
+	main()
